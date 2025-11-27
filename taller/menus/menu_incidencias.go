@@ -27,14 +27,12 @@ func MenuIncidencias(t *models.Taller) {
 
 		switch op {
 		case 1:
-			var mat, tipo, pri, desc string
+			var mat, tipo, desc string
 			var mecID int
 			fmt.Print("Matrícula: ")
 			fmt.Scanln(&mat)
 			fmt.Print("Tipo: ")
 			fmt.Scanln(&tipo)
-			fmt.Print("Prioridad: ")
-			fmt.Scanln(&pri)
 			fmt.Print("Descripción: ")
 			desc, _ = reader.ReadString('\n')
 			desc = strings.TrimSpace(desc)
@@ -45,7 +43,7 @@ func MenuIncidencias(t *models.Taller) {
 				fmt.Println("Mecánico no encontrado.")
 				break
 			}
-			inc, err := t.NewIncidencia(mat, tipo, pri, desc)
+			inc, err := t.NewIncidencia(mat, tipo, desc)
 			if err != nil {
 				fmt.Println(err)
 			} else {
@@ -74,7 +72,7 @@ func MenuIncidencias(t *models.Taller) {
 			desc = strings.TrimSpace(desc)
 			fmt.Print("Estado (0 Abierta, 1 En proceso, 2 Cerrada): ")
 			fmt.Scanln(&estado)
-			if err := t.UpdateIncidencia(id, tipo, pri, desc, estado); err != nil {
+			if err := t.UpdateIncidencia(id, tipo, desc, estado); err != nil {
 				fmt.Println(err)
 			} else {
 				fmt.Println("Incidencia actualizada.")

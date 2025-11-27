@@ -10,22 +10,6 @@ import (
 
 const MAX_PLAZAS = 10 // número máximo total de plazas en el taller
 
-// ------------ TIPOS ENUMERADOS ------------
-
-// ------------ DEFINICIÓN DE LAS ESTRUCTURAS ------------
-
-// ------------ FUNCIONES DE CREACIÓN ------------
-
-// ------------ FUNCIONES DE OBTENCIÓN ------------
-
-// ------------ FUNCIONES DE MODIFICACIÓN ------------
-
-// ------------ FUNCIONES DE ELIMINACIÓN ------------
-
-// ---------- FUNCIONES DE MOSTRAR DATOS ----------
-
-// ---------- SUBMENÚS DE LAS ESTRUCTURAS ----------
-
 func main() {
 	t := &models.Taller{}
 

@@ -68,7 +68,7 @@ func (t *Taller) NewVehiculo(mat string, mar string, mod string, fentrada string
 	return v
 }
 
-func (t *Taller) NewIncidencia(mat string, tip string, p string, d string) (*Incidencia, error) {
+func (t *Taller) NewIncidencia(mat string, tip string, d string) (*Incidencia, error) {
 	esp := Especialidad(strings.ToLower(tip))
 
 	if esp != Mecanica && esp != Electrica && esp != Carroceria {
@@ -84,7 +84,6 @@ func (t *Taller) NewIncidencia(mat string, tip string, p string, d string) (*Inc
 	inc := &Incidencia{
 		ID:          t.NextIncidenciaID,
 		Tipo:        esp,
-		Prioridad:   p,
 		Descripcion: d,
 		Estado:      0,
 		TiempoFase:  0,
@@ -218,7 +217,7 @@ func (t *Taller) UpdateMecanico(id int, nombre string, a int, activo bool) error
 	return nil
 }
 
-func (t *Taller) UpdateIncidencia(id int, tipo, prioridad, desc string, estado int) error {
+func (t *Taller) UpdateIncidencia(id int, tipo, desc string, estado int) error {
 	inc := t.GetIncidencia(id)
 	if inc == nil {
 		return fmt.Errorf("incidencia con ID %d no encontrada", id)
@@ -229,9 +228,6 @@ func (t *Taller) UpdateIncidencia(id int, tipo, prioridad, desc string, estado i
 			return fmt.Errorf("tipo de incidencia inválido (%s)", tipo)
 		}
 		inc.Tipo = esp
-	}
-	if prioridad != "" {
-		inc.Prioridad = prioridad
 	}
 	if desc != "" {
 		inc.Descripcion = desc

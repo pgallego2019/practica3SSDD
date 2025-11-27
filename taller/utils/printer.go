@@ -40,10 +40,9 @@ func PrintVehiculo(v *models.Vehiculo) {
 
 	inc := v.Incidencia
 	fmt.Println("  Incidencia:")
-	fmt.Printf("   - [%s] %s (%s)\n",
+	fmt.Printf("   - [%s] %s\n",
 		estadoToString(inc.Estado),
 		inc.Tipo,
-		inc.Prioridad,
 	)
 }
 
@@ -55,7 +54,6 @@ func PrintIncidencia(i *models.Incidencia) {
 
 	fmt.Printf("ID: %d\n", i.ID)
 	fmt.Printf("Tipo: %s\n", i.Tipo)
-	fmt.Printf("Prioridad: %s\n", i.Prioridad)
 	fmt.Printf("Descripción: %s\n", i.Descripcion)
 
 	estadoStr := ""
