@@ -8,8 +8,6 @@ import (
 	"taller/utils"
 )
 
-const MAX_PLAZAS = 10 // número máximo total de plazas en el taller
-
 func main() {
 	t := &models.Taller{}
 

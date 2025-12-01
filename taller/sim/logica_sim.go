@@ -195,90 +195,84 @@ func (s *Simulador) imprimirVehiculo(v *models.Vehiculo, fase Fase, estado strin
 		elapsed, v.Matricula, v.Incidencia.ID, v.Incidencia.Tipo, fase.String(), estado)
 }
 
-func (s *Simulador) RunSim(
-	Sims int,
-	N int,
-	NumPlazas int,
-	NumMecanicos int,
-	maxEsperas map[Fase]int,
-) {
+// Simulacion con semáforos porque tengo límites con NumPlazas y NumMecanicos.
+// Si uso mtx no limito eso, solo aseguro exclusion mutua
+func (s *Simulador) RunSim(Sims int, N int, NumPlazas int, NumMecanicos int, maxEsperas map[Fase]int) {
+
 	for sim := 1; sim <= Sims; sim++ {
 		fmt.Printf("\n=== SIMULACIÓN %d ===\n", sim)
+		//no se pq esa linea da error
 
 		s.Start = time.Now()
-
-		// Generar N vehículos aleatorios
 		vehiculos := generarVehiculosAleatorios(N)
+		s.WG = sync.WaitGroup{}
 
-		// Semáforos para limitar plazas y mecánicos
+		//  Semáforos añadidos
 		semPlazas := make(chan struct{}, NumPlazas)
-		semMecanicos := make(chan struct{}, NumMecanicos)
+		semMec := make(chan struct{}, NumMecanicos)
+		semLimp := make(chan struct{}, 1)
+		semRev := make(chan struct{}, 1)
 
 		// Inicializar semáforos
-		// Uso semáforos porque quiero que esperen bloqueados si no hay más espacio. Los vehículos no entran secuencialmente
-		// TODO respetar prioridad de atención de los vehiculos según categoría
 		for i := 0; i < NumPlazas; i++ {
 			semPlazas <- struct{}{}
 		}
 		for i := 0; i < NumMecanicos; i++ {
-			semMecanicos <- struct{}{}
+			semMec <- struct{}{}
 		}
+		semLimp <- struct{}{}
+		semRev <- struct{}{}
 
-		var wg sync.WaitGroup
+		//  Procesamiento vehículos
 		for _, v := range vehiculos {
-			wg.Add(1)
-			go func(v *models.Vehiculo) {
-				defer wg.Done()
+			s.WG.Add(1)
 
-				// --------------------
-				// Fase 1: PLAZA
-				// --------------------
-				<-semPlazas // espera hasta que haya plaza libre
+			go func(v *models.Vehiculo) {
+				defer s.WG.Done()
+
+				// --------- Fase 1: PLAZA ----------
+				<-semPlazas // ocupa plaza
 				s.imprimirVehiculo(v, FaseEntrada, "Entra plaza")
 				time.Sleep(time.Duration(v.Incidencia.TiempoFase) * time.Second)
 				s.imprimirVehiculo(v, FaseEntrada, "Sale plaza")
 				semPlazas <- struct{}{} // libera plaza
 
-				// --------------------
-				// Fase 2: MECÁNICO
-				// --------------------
-				<-semMecanicos // espera a que haya mecánico libre
+				// --------- Fase 2: MECÁNICO ----------
+				<-semMec // ocupa mecánico
 				s.imprimirVehiculo(v, FaseAtencion, "Atendido por mecánico")
 				time.Sleep(time.Duration(v.Incidencia.TiempoFase) * time.Second)
 				s.imprimirVehiculo(v, FaseAtencion, "Finaliza mecánico")
-				semMecanicos <- struct{}{} // libera mecánico
+				semMec <- struct{}{} // libera mecánico
 
-				// --------------------
-				// Fase 3: LIMPIEZA
-				// --------------------
+				// --------- Fase 3: LIMPIEZA ----------
+				<-semLimp // ocupa limpieza
 				s.imprimirVehiculo(v, FaseLimpieza, "Limpiando")
 				time.Sleep(time.Duration(v.Incidencia.TiempoFase) * time.Second)
 				s.imprimirVehiculo(v, FaseLimpieza, "Limpieza finalizada")
+				semLimp <- struct{}{} // libera limpieza
 
-				// --------------------
-				// Fase 4: REVISIÓN
-				// --------------------
+				// --------- Fase 4: REVISIÓN ----------
+				<-semRev // ocupa revisión
 				s.imprimirVehiculo(v, FaseRevision, "Revisión")
 				time.Sleep(time.Duration(v.Incidencia.TiempoFase) * time.Second)
 				s.imprimirVehiculo(v, FaseRevision, "Vehículo entregado")
+				semRev <- struct{}{} // libera revisión
 
 			}(v)
 		}
 
-		wg.Wait()
+		s.WG.Wait()
 		fmt.Printf("=== FIN SIMULACIÓN %d ===\n", sim)
 	}
 }
 
 // Inicia una simulacion con parámetros de prueba
 func SimularTaller(t *models.Taller) {
-	N := 8            // Número de vehículos
-	NumPlazas := 3    // Plazas de espera
-	NumMecanicos := 2 // Mecánicos disponibles
-	Sims := 1         // Número de simulaciones
-	//Metodo := MetodoRWMutex // Puedes cambiar a MetodoWaitGroup
+	N := 8
+	NumPlazas := models.MAX_PLAZAS
+	NumMecanicos := 2
+	Sims := 1
 
-	// Máximos en las colas por fase (0 = ilimitado)
 	maxEsperas := map[Fase]int{
 		FaseEntrada:  0,
 		FaseAtencion: 0,
@@ -286,12 +280,9 @@ func SimularTaller(t *models.Taller) {
 		FaseRevision: 0,
 	}
 
-	// Crear simulador
 	simulador := NewSimulador(t)
 
 	fmt.Println("=== INICIANDO TEST DEL TALLER ===")
-	// Ejecutar simulación
 	simulador.RunSim(Sims, N, NumPlazas, NumMecanicos, maxEsperas)
 	fmt.Println("=== TEST DEL TALLER FINALIZADO ===")
 }
-

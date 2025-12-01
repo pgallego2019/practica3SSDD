@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+var MAX_PLAZAS = 10 // número máximo total de plazas en el taller
+
 /*
 type Taller struct {
     Plazas     chan struct{}
