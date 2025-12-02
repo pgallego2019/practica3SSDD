@@ -35,68 +35,6 @@ func (f Fase) String() string {
 
 const variacionMax = 0.4 // 40%? TODO ver si es mucho y usarlo
 
-// Para mantener un orden de prioridad en cada fase
-/*
-type ColaPrioritaria struct {
-	altas  []*models.Vehiculo
-	medias []*models.Vehiculo
-	bajas  []*models.Vehiculo
-}
-
-func NewColaPrioritaria() *ColaPrioritaria {
-	return &ColaPrioritaria{}
-}
-
-func (c *ColaPrioritaria) Push(v *models.Vehiculo) {
-	switch v.Incidencia.Tipo {
-	case models.Mecanica:
-		c.altas = append(c.altas, v)
-	case models.Electrica:
-		c.medias = append(c.medias, v)
-	case models.Carroceria:
-		c.bajas = append(c.bajas, v)
-	default:
-		c.medias = append(c.medias, v)
-	}
-}
-
-func (c *ColaPrioritaria) PopFront() *models.Vehiculo {
-	if len(c.altas) > 0 {
-		x := c.altas[0]
-		c.altas = c.altas[1:]
-		return x
-	}
-	if len(c.medias) > 0 {
-		x := c.medias[0]
-		c.medias = c.medias[1:]
-		return x
-	}
-	if len(c.bajas) > 0 {
-		x := c.bajas[0]
-		c.bajas = c.bajas[1:]
-		return x
-	}
-	return nil
-}
-
-func (c *ColaPrioritaria) Len() int {
-	return len(c.altas) + len(c.medias) + len(c.bajas)
-}
-
-func (c *ColaPrioritaria) FrontEquals(v *models.Vehiculo) bool {
-	if len(c.altas) > 0 {
-		return c.altas[0] == v
-	}
-	if len(c.medias) > 0 {
-		return c.medias[0] == v
-	}
-	if len(c.bajas) > 0 {
-		return c.bajas[0] == v
-	}
-	return false
-}
-*/
-
 // Genera un vehículo con un tipo de incidencia aleatorio
 func newSimVehiculo(id int) *models.Vehiculo {
 	var esp models.Especialidad
@@ -206,14 +144,14 @@ func variacionTiempoFase(tiempoBase int) time.Duration {
 	// evitar tiempos negativos pq puede salir cero en rand
 	// si pasa eso, ¿deberia devolver cero o dejarlo sin variar y devolver tiempoBase?
 	if tiempoFinal < 0 {
-		tiempoFinal = 0
+		tiempoFinal = float64(tiempoBase)
 	}
 
 	return time.Duration(tiempoFinal * float64(time.Second))
 }
 
-// Simulacion con semáforos porque tengo límites con NumPlazas y NumMecanicos.
-// Si uso mtx no limito eso, solo aseguro exclusion mutua
+// Ahora que tengo colas de prioridad tengo que asegurar que los vehiculos se atienden por orden de prioridad
+// Los mecanicos deben atender primero los de mecanica, luego los electricos y por ultimo los de carroceria
 func (s *Simulador) RunSim(Sims int, Nvehiculos int, NumPlazas int, NumMecanicos int, maxEsperas map[Fase]int) {
 
 	for sim := 1; sim <= Sims; sim++ {
@@ -221,70 +159,54 @@ func (s *Simulador) RunSim(Sims int, Nvehiculos int, NumPlazas int, NumMecanicos
 
 		s.Start = time.Now()
 		vehiculos := generarVehiculosAleatorios(Nvehiculos)
-		s.WG = sync.WaitGroup{}
+		// NO meter en Simulador el WG
+		//s.WG = sync.WaitGroup{}
+		var wgFinal sync.WaitGroup
+		//wgFinal.Add(len(vehiculos))
 
-		//  Semáforos añadidos
-		// NumPlazas es la capacidad total del taller. limpieza y revision tienen la misma capacidad
+		// Colas por prioridad para cada fase
+		colaEntrada := NewColaPrioritaria()
+		colaMecanico := NewColaPrioritaria()
+		colaLimpieza := NewColaPrioritaria()
+		colaRevision := NewColaPrioritaria()
+
+		// Canales con capacidad
 		semPlazas := make(chan struct{}, NumPlazas)
-		semMec := make(chan struct{}, NumMecanicos)
 		semLimp := make(chan struct{}, NumPlazas)
 		semRev := make(chan struct{}, NumPlazas)
-
-		// Tomo NumPlazas como plazas totales del taller
-
+		semMec := make(chan struct{}, NumMecanicos)
 		for i := 0; i < NumPlazas; i++ {
 			semPlazas <- struct{}{}
+			semLimp <- struct{}{}
+			semRev <- struct{}{}
 		}
 		for i := 0; i < NumMecanicos; i++ {
 			semMec <- struct{}{}
 		}
+
+		// Lanzar workers
+		// TODO ver si cerrar canales en algun momento !!
 		for i := 0; i < NumPlazas; i++ {
-			semLimp <- struct{}{}
+			go s.workerEntrada(colaEntrada, colaMecanico, semPlazas)
+		}
+		for i := 0; i < NumMecanicos; i++ {
+			go s.workerMecanico(colaMecanico, colaLimpieza, semMec)
 		}
 		for i := 0; i < NumPlazas; i++ {
-			semRev <- struct{}{}
+			go s.workerLimpieza(colaLimpieza, colaRevision, semLimp)
+		}
+		for i := 0; i < NumPlazas; i++ {
+			//TODO ver si se pasa bien wgfinal o si hay condicion de carrera
+			go s.workerRevision(colaRevision, semRev, &wgFinal)
 		}
 
-		//  Procesamiento vehículos
+		// Encolar vehículos en la cola de entrada
 		for _, v := range vehiculos {
-			s.WG.Add(1)
-
-			go func(v *models.Vehiculo) {
-				defer s.WG.Done() //si no limpio me da fatal error: all goroutines are asleep - deadlock! cuando se acaba la simulación
-
-				// --------- Fase 1: PLAZA ----------
-				<-semPlazas // ocupa plaza
-				s.imprimirVehiculo(v, FaseEntrada, "Entra plaza")
-				//time.Sleep(time.Duration(v.Incidencia.TiempoFase) * time.Second) //aqui es donde tengo que usar la variacionMax?
-				time.Sleep(variacionTiempoFase(v.Incidencia.TiempoFase))
-				s.imprimirVehiculo(v, FaseEntrada, "Sale plaza")
-				semPlazas <- struct{}{} // libera plaza
-
-				// --------- Fase 2: MECÁNICO ----------
-				<-semMec // ocupa mecánico
-				s.imprimirVehiculo(v, FaseAtencion, "Atendido por mecánico")
-				time.Sleep(variacionTiempoFase(v.Incidencia.TiempoFase))
-				s.imprimirVehiculo(v, FaseAtencion, "Finaliza mecánico")
-				semMec <- struct{}{} // libera mecánico
-
-				// --------- Fase 3: LIMPIEZA ----------
-				<-semLimp // ocupa limpieza
-				s.imprimirVehiculo(v, FaseLimpieza, "Limpiando")
-				time.Sleep(variacionTiempoFase(v.Incidencia.TiempoFase))
-				s.imprimirVehiculo(v, FaseLimpieza, "Limpieza finalizada")
-				semLimp <- struct{}{} // libera limpieza
-
-				// --------- Fase 4: REVISIÓN ----------
-				<-semRev // ocupa revisión
-				s.imprimirVehiculo(v, FaseRevision, "Revisión")
-				time.Sleep(variacionTiempoFase(v.Incidencia.TiempoFase))
-				s.imprimirVehiculo(v, FaseRevision, "Vehículo entregado")
-				semRev <- struct{}{} // libera revisión
-
-			}(v)
+			colaEntrada.Push(v)
 		}
 
-		s.WG.Wait()
+		// Esperar a que todos los vehículos terminen la última fase
+		wgFinal.Wait()
 		fmt.Printf("=== FIN SIMULACIÓN %d ===\n", sim)
 	}
 }
