@@ -7,13 +7,9 @@ import (
 )
 
 type Simulador struct {
-	Taller      *models.Taller
-	MtxPlazas   sync.Mutex
-	MtxMecanico sync.Mutex
-	MtxLimpieza sync.Mutex
-	MtxRevision sync.Mutex
-	WG          sync.WaitGroup
-	Start       time.Time
+	Taller *models.Taller
+	WG     sync.WaitGroup
+	Start  time.Time
 }
 
 // Constructor del simulador

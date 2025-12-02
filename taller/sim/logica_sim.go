@@ -36,7 +36,7 @@ func (f Fase) String() string {
 const variacionMax = 0.4 // 40%? TODO ver si es mucho y usarlo
 
 // Para mantener un orden de prioridad en cada fase
-// Hay que proteger el acceso con mutex cuando se use
+/*
 type ColaPrioritaria struct {
 	altas  []*models.Vehiculo
 	medias []*models.Vehiculo
@@ -95,6 +95,7 @@ func (c *ColaPrioritaria) FrontEquals(v *models.Vehiculo) bool {
 	}
 	return false
 }
+*/
 
 // Genera un vehículo con un tipo de incidencia aleatorio
 func newSimVehiculo(id int) *models.Vehiculo {
@@ -191,70 +192,92 @@ func generarVehiculosAleatorios(N int) []*models.Vehiculo {
 // Muestra el estado del vehículo en cada fase
 func (s *Simulador) imprimirVehiculo(v *models.Vehiculo, fase Fase, estado string) {
 	elapsed := time.Since(s.Start).Truncate(time.Millisecond)
-	fmt.Printf("Tiempo %v Vehiculo %s(ID:%d) Incidencia %s Fase %s Estado %s\n",
+	fmt.Printf("Tiempo %v | Vehiculo %s(ID:%d) | Incidencia %s | Fase %s | Estado %s\n",
 		elapsed, v.Matricula, v.Incidencia.ID, v.Incidencia.Tipo, fase.String(), estado)
+}
+
+// varía el tiempo de fase según una variación máxima
+func variacionTiempoFase(tiempoBase int) time.Duration {
+	r := (rand.Float64()*2 - 1) * variacionMax // rango [-variacionMax, +variacionMax]
+
+	variacion := float64(tiempoBase) * r
+	tiempoFinal := float64(tiempoBase) + variacion
+
+	// evitar tiempos negativos pq puede salir cero en rand
+	// si pasa eso, ¿deberia devolver cero o dejarlo sin variar y devolver tiempoBase?
+	if tiempoFinal < 0 {
+		tiempoFinal = 0
+	}
+
+	return time.Duration(tiempoFinal * float64(time.Second))
 }
 
 // Simulacion con semáforos porque tengo límites con NumPlazas y NumMecanicos.
 // Si uso mtx no limito eso, solo aseguro exclusion mutua
-func (s *Simulador) RunSim(Sims int, N int, NumPlazas int, NumMecanicos int, maxEsperas map[Fase]int) {
+func (s *Simulador) RunSim(Sims int, Nvehiculos int, NumPlazas int, NumMecanicos int, maxEsperas map[Fase]int) {
 
 	for sim := 1; sim <= Sims; sim++ {
 		fmt.Printf("\n=== SIMULACIÓN %d ===\n", sim)
-		//no se pq esa linea da error
 
 		s.Start = time.Now()
-		vehiculos := generarVehiculosAleatorios(N)
+		vehiculos := generarVehiculosAleatorios(Nvehiculos)
 		s.WG = sync.WaitGroup{}
 
 		//  Semáforos añadidos
+		// NumPlazas es la capacidad total del taller. limpieza y revision tienen la misma capacidad
 		semPlazas := make(chan struct{}, NumPlazas)
 		semMec := make(chan struct{}, NumMecanicos)
-		semLimp := make(chan struct{}, 1)
-		semRev := make(chan struct{}, 1)
+		semLimp := make(chan struct{}, NumPlazas)
+		semRev := make(chan struct{}, NumPlazas)
 
-		// Inicializar semáforos
+		// Tomo NumPlazas como plazas totales del taller
+
 		for i := 0; i < NumPlazas; i++ {
 			semPlazas <- struct{}{}
 		}
 		for i := 0; i < NumMecanicos; i++ {
 			semMec <- struct{}{}
 		}
-		semLimp <- struct{}{}
-		semRev <- struct{}{}
+		for i := 0; i < NumPlazas; i++ {
+			semLimp <- struct{}{}
+		}
+		for i := 0; i < NumPlazas; i++ {
+			semRev <- struct{}{}
+		}
 
 		//  Procesamiento vehículos
 		for _, v := range vehiculos {
 			s.WG.Add(1)
 
 			go func(v *models.Vehiculo) {
-				defer s.WG.Done()
+				defer s.WG.Done() //si no limpio me da fatal error: all goroutines are asleep - deadlock! cuando se acaba la simulación
 
 				// --------- Fase 1: PLAZA ----------
 				<-semPlazas // ocupa plaza
 				s.imprimirVehiculo(v, FaseEntrada, "Entra plaza")
-				time.Sleep(time.Duration(v.Incidencia.TiempoFase) * time.Second)
+				//time.Sleep(time.Duration(v.Incidencia.TiempoFase) * time.Second) //aqui es donde tengo que usar la variacionMax?
+				time.Sleep(variacionTiempoFase(v.Incidencia.TiempoFase))
 				s.imprimirVehiculo(v, FaseEntrada, "Sale plaza")
 				semPlazas <- struct{}{} // libera plaza
 
 				// --------- Fase 2: MECÁNICO ----------
 				<-semMec // ocupa mecánico
 				s.imprimirVehiculo(v, FaseAtencion, "Atendido por mecánico")
-				time.Sleep(time.Duration(v.Incidencia.TiempoFase) * time.Second)
+				time.Sleep(variacionTiempoFase(v.Incidencia.TiempoFase))
 				s.imprimirVehiculo(v, FaseAtencion, "Finaliza mecánico")
 				semMec <- struct{}{} // libera mecánico
 
 				// --------- Fase 3: LIMPIEZA ----------
 				<-semLimp // ocupa limpieza
 				s.imprimirVehiculo(v, FaseLimpieza, "Limpiando")
-				time.Sleep(time.Duration(v.Incidencia.TiempoFase) * time.Second)
+				time.Sleep(variacionTiempoFase(v.Incidencia.TiempoFase))
 				s.imprimirVehiculo(v, FaseLimpieza, "Limpieza finalizada")
 				semLimp <- struct{}{} // libera limpieza
 
 				// --------- Fase 4: REVISIÓN ----------
 				<-semRev // ocupa revisión
 				s.imprimirVehiculo(v, FaseRevision, "Revisión")
-				time.Sleep(time.Duration(v.Incidencia.TiempoFase) * time.Second)
+				time.Sleep(variacionTiempoFase(v.Incidencia.TiempoFase))
 				s.imprimirVehiculo(v, FaseRevision, "Vehículo entregado")
 				semRev <- struct{}{} // libera revisión
 
@@ -268,10 +291,10 @@ func (s *Simulador) RunSim(Sims int, N int, NumPlazas int, NumMecanicos int, max
 
 // Inicia una simulacion con parámetros de prueba
 func SimularTaller(t *models.Taller) {
-	N := 8
-	NumPlazas := models.MAX_PLAZAS
-	NumMecanicos := 2
-	Sims := 1
+	N := 4         // número de vehículos por simulación
+	NumPlazas := 1 // quito models.MAX_PLAZAS para probar con menos plazas
+	NumMecanicos := 1
+	Sims := 1 // Para poder ejecutar varias simulaciones seguidas
 
 	maxEsperas := map[Fase]int{
 		FaseEntrada:  0,
