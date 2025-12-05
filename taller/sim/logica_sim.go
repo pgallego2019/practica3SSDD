@@ -213,8 +213,8 @@ func (s *Simulador) RunSim(Sims int, Nvehiculos int, NumPlazas int, NumMecanicos
 
 // Inicia una simulacion con parámetros de prueba
 func SimularTaller(t *models.Taller) {
-	N := 4         // número de vehículos por simulación
-	NumPlazas := 1 // quito models.MAX_PLAZAS para probar con menos plazas
+	N := 30         // número de vehículos por simulación
+	NumPlazas := 10 // quito models.MAX_PLAZAS para probar con menos plazas
 	NumMecanicos := 1
 	Sims := 1 // Para poder ejecutar varias simulaciones seguidas
 
