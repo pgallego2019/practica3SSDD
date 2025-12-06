@@ -1,14 +1,17 @@
 package sim
 
 import (
+	"bufio"
 	"fmt"
 	"math/rand"
+	"os"
+	"strings"
 	"sync"
 	"taller/models"
 	"time"
 )
 
-// Para representar las 4 fases del taller
+// Para representar las 4 fases por las que pasan los vehículos
 type Fase int
 
 const (
@@ -44,13 +47,11 @@ func (s *Simulador) imprimirVehiculo(v *models.Vehiculo, fase Fase, estado strin
 
 // varía el tiempo de fase según una variación máxima
 func variacionTiempoFase(tiempoBase int) time.Duration {
-	r := (rand.Float64()*2 - 1) * variacionMax // rango [-variacionMax, +variacionMax]
+	r := (rand.Float64()*2 - 1) * variacionMax
 
 	variacion := float64(tiempoBase) * r
 	tiempoFinal := float64(tiempoBase) + variacion
 
-	// evitar tiempos negativos pq puede salir cero en rand
-	// si pasa eso, ¿deberia devolver cero o dejarlo sin variar y devolver tiempoBase?
 	if tiempoFinal < 0 {
 		tiempoFinal = float64(tiempoBase)
 	}
@@ -66,6 +67,7 @@ func (s *Simulador) RunSim(Sims int, Nvehiculos int, NumPlazas int, NumMecanicos
 		fmt.Printf("\n=== SIMULACIÓN %d ===\n", sim)
 
 		s.Start = time.Now()
+		s.Done = make(chan struct{})
 		vehiculos := GenerarVehiculosAleatorios(Nvehiculos)
 		ImprimirResumenCategorias(vehiculos)
 		// NO meter en Simulador el WG
@@ -94,7 +96,6 @@ func (s *Simulador) RunSim(Sims int, Nvehiculos int, NumPlazas int, NumMecanicos
 		}
 
 		// Lanzar workers
-		// TODO ver si cerrar canales en algun momento !!
 		for i := 0; i < NumPlazas; i++ {
 			go s.workerEntrada(colaEntrada, colaMecanico, semPlazas)
 		}
@@ -105,7 +106,6 @@ func (s *Simulador) RunSim(Sims int, Nvehiculos int, NumPlazas int, NumMecanicos
 			go s.workerLimpieza(colaLimpieza, colaRevision, semLimp)
 		}
 		for i := 0; i < NumPlazas; i++ {
-			//TODO ver si se pasa bien wgfinal o si hay condicion de carrera
 			go s.workerRevision(colaRevision, semRev, &wgFinal)
 		}
 
@@ -116,16 +116,46 @@ func (s *Simulador) RunSim(Sims int, Nvehiculos int, NumPlazas int, NumMecanicos
 
 		// Esperar a que todos los vehículos terminen la última fase
 		wgFinal.Wait()
+		close(s.Done)
 		fmt.Printf("=== FIN SIMULACIÓN %d ===\n", sim)
 	}
 }
 
 // Inicia una simulacion con parámetros de prueba
 func SimularTaller(t *models.Taller) {
-	N := 10        // número de vehículos por simulación
-	NumPlazas := 2 // quito models.MAX_PLAZAS para probar con menos plazas
+	reader := bufio.NewReader(os.Stdin)
+
+	// Valores por defecto
+	N := 10
+	NumPlazas := 2
 	NumMecanicos := 1
-	Sims := 1 // Para poder ejecutar varias simulaciones seguidas y ver diferencias
+	Sims := 1
+
+	fmt.Printf("Introduce el número de vehículos (por defecto %d): ", N)
+	if input, _ := reader.ReadString('\n'); strings.TrimSpace(input) != "" {
+		fmt.Sscan(input, &N)
+	}
+
+	fmt.Printf("Introduce el número de plazas disponibles (por defecto %d): ", NumPlazas)
+	if input, _ := reader.ReadString('\n'); strings.TrimSpace(input) != "" {
+		fmt.Sscan(input, &NumPlazas)
+	}
+
+	fmt.Printf("Introduce el número de mecánicos (por defecto %d): ", NumMecanicos)
+	if input, _ := reader.ReadString('\n'); strings.TrimSpace(input) != "" {
+		fmt.Sscan(input, &NumMecanicos)
+	}
+
+	fmt.Printf("Introduce cuántas simulaciones quieres ejecutar (por defecto %d): ", Sims)
+	if input, _ := reader.ReadString('\n'); strings.TrimSpace(input) != "" {
+		fmt.Sscan(input, &Sims)
+	}
+
+	// Validación
+	if N <= 0 || NumPlazas <= 0 || NumMecanicos <= 0 || Sims <= 0 {
+		fmt.Println("Error: todos los valores deben ser mayores que cero.")
+		return
+	}
 
 	maxEsperas := map[Fase]int{
 		FaseEntrada:  0,

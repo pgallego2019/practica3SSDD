@@ -10,6 +10,7 @@ import (
 type Simulador struct {
 	Taller *models.Taller
 	Start  time.Time
+	Done   chan struct{} // Para saber cuando cerrar
 }
 
 // Constructor del simulador
@@ -32,17 +33,16 @@ func (s *Simulador) workerEntrada(
 	semPlazas chan struct{},
 ) {
 	for {
-		/*v := colaIn.PopFront()
-		if v == nil {
-			time.Sleep(5 * time.Millisecond)
-			continue
-		}*/
-		// Espera hasta que haya vehículo
-		<-colaIn.notify
+		select {
+		case <-s.Done:
+			return // fin del worker
+		case <-colaIn.notify:
+			// hay vehículo, seguimos más abajo
+		}
 
 		v := colaIn.PopFront()
 		if v == nil {
-			continue // alguien más se adelantó. no se si break o continue.
+			continue
 		}
 
 		<-semPlazas // ocupa plaza
@@ -63,17 +63,15 @@ func (s *Simulador) workerMecanico(
 	semMec chan struct{},
 ) {
 	for {
-		/*v := colaIn.PopFront()
-		if v == nil {
-			time.Sleep(5 * time.Millisecond)
-			continue
-		}*/
-		// Espera hasta que haya vehículo
-		<-colaIn.notify
+		select {
+		case <-s.Done:
+			return
+		case <-colaIn.notify:
+		}
 
 		v := colaIn.PopFront()
 		if v == nil {
-			continue // alguien más se adelantó
+			continue
 		}
 
 		<-semMec // ocupa mecánico
@@ -92,17 +90,15 @@ func (s *Simulador) workerLimpieza(
 	semLimp chan struct{},
 ) {
 	for {
-		/*v := colaIn.PopFront()
-		if v == nil {
-			time.Sleep(5 * time.Millisecond)
-			continue
-		}*/
-		// Espera hasta que haya vehículo
-		<-colaIn.notify
+		select {
+		case <-s.Done:
+			return
+		case <-colaIn.notify:
+		}
 
 		v := colaIn.PopFront()
 		if v == nil {
-			continue // alguien más se adelantó
+			continue
 		}
 
 		<-semLimp
@@ -121,17 +117,15 @@ func (s *Simulador) workerRevision(
 	wg *sync.WaitGroup,
 ) {
 	for {
-		/*v := colaIn.PopFront()
-		if v == nil {
-			time.Sleep(5 * time.Millisecond)
-			continue
-		}*/
-		// Espera hasta que haya vehículo
-		<-colaIn.notify
+		select {
+		case <-s.Done:
+			return
+		case <-colaIn.notify:
+		}
 
 		v := colaIn.PopFront()
 		if v == nil {
-			continue // alguien más se adelantó
+			continue
 		}
 
 		<-semRev

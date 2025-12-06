@@ -1,5 +1,8 @@
 # Practica 3 -  El Taller del pueblo
 #### Sistemas Distribuidos - GIT - URJC 2025
+## Introducción
+
+## Reorganización del código del proyecto
 Comenzamos la práctica reorganizando el código existente. En la práctica anterior el código estaba distribuido en solo tres archivos principales (main.go, simulacion.go y simulacion_test.go), pero la estructura era difícil de mantener a medida que el proyecto crecía y había que añadir/eliminar funcionalidades.
 
 Para mejorar la modularidad y la claridad, reestructuré el proyecto en paquetes. Esta organización permite agrupar código con una responsabilidad concreta y facilitar la reutilización de código.
@@ -23,12 +26,18 @@ Cada paquete incluye:
 
 ### Estructuras de datos
 
-#### Representación dinámica: Diagrama de secuencia
+### Diagrama de clases
 
-#### Representación general: Diagrama de flujo
+### Diagrama de secuencia
+
+### Diagrama de flujo
+
+### Diagrama de concurrencia
+
+## Implementación del paquete _sim_
 
 ## Test realizados
 	
 ### Métricas obtenidas y análisis
 
-#### Conclusiones
+## Conclusiones
