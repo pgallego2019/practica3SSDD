@@ -11,9 +11,10 @@ import (
 type Metricas struct {
 	VehiculosPorFase   map[Fase]int
 	TiemposPorVehiculo map[int]time.Duration
-	mutex              sync.Mutex
+	mutex              sync.RWMutex //CAMBIO POR RW
 	Inicio             time.Time
 	Fin                time.Time
+	Simulador          string
 }
 
 func NuevaMetricas() *Metricas {

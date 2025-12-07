@@ -2,75 +2,77 @@ package sim
 
 import (
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 )
 
+// Ejecuta los escenarios con ambos simuladores y compara resultados
 func TestComparativaEscenarios(t *testing.T) {
-	EjecutarEscenario(t, 10, 10, 10)
-	EjecutarEscenario(t, 20, 5, 5)
-	EjecutarEscenario(t, 5, 5, 20)
+	escenarios := []struct{ numA, numB, numC int }{
+		{10, 10, 10},
+		{20, 5, 5},
+		{5, 5, 20},
+	}
+
+	for _, esc := range escenarios {
+		fmt.Printf("\n=== ESCENARIO %dA/%dB/%dC ===\n", esc.numA, esc.numB, esc.numC)
+
+		fmt.Println("\n--- Simulación WaitGroup ---")
+		wgSim := NewSimuladorWaitGroup(nil)
+		EjecutarEscenarioSimulador(t, wgSim, esc.numA, esc.numB, esc.numC)
+
+		fmt.Println("\n--- Simulación RWMutex ---")
+		rwSim := NewSimuladorRWMutex(nil)
+		EjecutarEscenarioSimulador(t, rwSim, esc.numA, esc.numB, esc.numC)
+	}
+
 	imprimirTablaResultados()
 }
 
-// Función auxiliar para ejecutar un escenario con métricas
-func EjecutarEscenario(t *testing.T, numA, numB, numC int) {
+// Ejecuta un escenario con un simulador genérico
+func EjecutarEscenarioSimulador(t *testing.T, simulador ISimulador, numA, numB, numC int) {
+	//NO imprimir los cambios de fase (muchas lineas, dificil ver bien el test)
+	simulador.SetVerbose(false)
 
-	//Preparar entorno
-	nplazas := 10
-	nmecanicos := 2
-
+	// Generar vehículos
 	vehiculos := GenerarVehiculosPorCategorias(numA, numB, numC)
-	rs := inicializarRecursos(nplazas, nmecanicos)
+	totalVehiculos := len(vehiculos) // 30
 
-	fmt.Printf("\n--- Simulación con %d plazas y %d mecánicos (%dA / %dB / %dC) (var.máx. %.2f) ---\n", nplazas, nmecanicos, numA, numB, numC, variacionMax)
-
+	// Inicializar métricas
 	metricas := NuevaMetricas()
-	metricas.Inicio = time.Now()
-	//	Metricas auxiliares
-	aux := inicializarMetricasAux()
 	tiempoPorVehiculo := NuevaTiempoVehiculo()
+	aux := inicializarMetricasAux()
 
-	// WaitGroup
-	var wgFinal sync.WaitGroup
-	wgFinal.Add(len(vehiculos))
-
-	// Lanzar workers
-	for i := 0; i < rs.NumPlazas; i++ {
-		LanzarWorkerMetricas(rs.ColaEntrada, rs.ColaMecanico, rs.SemPlazas, FaseEntrada, metricas, aux, tiempoPorVehiculo, nil)
-		LanzarWorkerMetricas(rs.ColaLimpieza, rs.ColaRevision, rs.SemLimp, FaseLimpieza, metricas, aux, tiempoPorVehiculo, nil)
-		LanzarWorkerMetricas(rs.ColaRevision, nil, rs.SemRev, FaseRevision, metricas, aux, tiempoPorVehiculo, &wgFinal)
+	// Cada simulador debe registrar sus propios tiempos dentro de RunSim
+	// maxEsperas no se usa actualmente, pero lo dejamos para compatibilidad
+	maxEsperas := map[Fase]int{
+		FaseEntrada:  0,
+		FaseAtencion: 0,
+		FaseLimpieza: 0,
+		FaseRevision: 0,
 	}
 
-	for i := 0; i < rs.NumMecanicos; i++ {
-		LanzarWorkerMetricas(rs.ColaMecanico, rs.ColaLimpieza, rs.SemMec, FaseAtencion, metricas, aux, tiempoPorVehiculo, nil)
-	}
+	// Ejecutar simulación
+	simulador.RunSim(vehiculos, 1, totalVehiculos, 10, 2, maxEsperas, metricas, tiempoPorVehiculo, aux)
 
-	// Encolar vehículos
-	for _, v := range vehiculos {
-		rs.ColaEntrada.Push(v)
-	}
+	imprimirMetricasPorFase(aux)
 
-	// Esperar finalización
-	wgFinal.Wait()
-	metricas.Fin = time.Now()
-
-	// Registrar y mostrar métricas
-	fmt.Printf("\n=== MÉTRICAS ESCENARIO %dA/%dB/%dC ===\n", numA, numB, numC)
+	// Mostrar resumen
+	fmt.Printf("Vehículos generados: %dA/%dB/%dC (total %d)\n", numA, numB, numC, totalVehiculos)
 	fmt.Printf("Tiempo total simulación: %v\n", metricas.Fin.Sub(metricas.Inicio))
-	for fase, num := range metricas.VehiculosPorFase {
-		fmt.Printf("Vehículos atendidos fase %s: %d\n", fase, num)
-	}
-	totalVehiculos := len(vehiculos)
+
+	// Tiempos por vehículo
 	tiempoTotal := time.Duration(0)
 	for _, t := range metricas.TiemposPorVehiculo {
 		tiempoTotal += t
 	}
-	fmt.Printf("Tiempo promedio por vehículo: %v\n", tiempoTotal/time.Duration(totalVehiculos))
+	if totalVehiculos > 0 {
+		fmt.Printf("Tiempo promedio por vehículo: %v\n", tiempoTotal/time.Duration(totalVehiculos))
+	}
 
-	imprimirMetricasPorFase(aux)
+	// Tiempo por categoría
 	imprimirTiempoPorCategoria(vehiculos, tiempoPorVehiculo)
 
+	// Guardar resultados
 	registrarResultado(fmt.Sprintf("%dA/%dB/%dC", numA, numB, numC), metricas)
 }

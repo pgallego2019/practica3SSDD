@@ -8,6 +8,47 @@ import (
 	"time"
 )
 
+const variacionMax = 0.15 // Mejor entre 10-20%
+
+// Para representar las 4 fases por las que pasan los vehículos
+type Fase int
+
+const (
+	FaseEntrada Fase = iota + 1
+	FaseAtencion
+	FaseLimpieza
+	FaseRevision
+)
+
+func (f Fase) String() string {
+	switch f {
+	case FaseEntrada:
+		return "Entrada"
+	case FaseAtencion:
+		return "Atencion"
+	case FaseLimpieza:
+		return "Limpieza"
+	case FaseRevision:
+		return "Revision"
+	default:
+		return "Desconocida"
+	}
+}
+
+// varía el tiempo de fase según una variación máxima
+func variacionTiempoFase(tiempoBase int) time.Duration {
+	r := (rand.Float64()*2 - 1) * variacionMax
+
+	variacion := float64(tiempoBase) * r
+	tiempoFinal := float64(tiempoBase) + variacion
+
+	if tiempoFinal < 0 {
+		tiempoFinal = float64(tiempoBase)
+	}
+
+	return time.Duration(tiempoFinal * float64(time.Second))
+}
+
 // Registro de tiempo total por vehículo
 type TiempoVehiculo struct {
 	Tiempos map[int]time.Duration
@@ -164,6 +205,6 @@ func ImprimirResumenCategorias(vehiculos []*models.Vehiculo) {
 	m, e, c := ContarCategorias(vehiculos)
 	total := len(vehiculos)
 
-	fmt.Printf("%d vehículos generados aleatoriamente: %d mecánica, %d eléctrica, %d carrocería\n",
+	fmt.Printf("%d vehículos generados: %d mecánica, %d eléctrica, %d carrocería\n",
 		total, m, e, c)
 }
