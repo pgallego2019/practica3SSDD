@@ -199,7 +199,7 @@ func (s *SimuladorWaitGroup) RunSim(
 
 ) {
 	for sim := 1; sim <= Sims; sim++ {
-		fmt.Printf("\n=== SIMULACIÓN WaitGroup %d ===\n", sim)
+		fmt.Printf("\n=== SIMULACIÓN WaitGroup %d (%d plazas y %d mecánicos) ===\n", sim, NumPlazas, NumMecanicos)
 
 		// Defensive init: si llamaron con nil, inicializamos aquí para evitar panic desde workers
 		if metricas == nil {

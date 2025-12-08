@@ -53,7 +53,9 @@ func EjecutarEscenarioSimulador(t *testing.T, simulador ISimulador, numA, numB, 
 	}
 
 	// Ejecutar simulación
-	simulador.RunSim(vehiculos, 1, totalVehiculos, 10, 2, maxEsperas, metricas, tiempoPorVehiculo, aux)
+	nPlazas := 10
+	nMecanicos := 2
+	simulador.RunSim(vehiculos, 1, totalVehiculos, nPlazas, nMecanicos, maxEsperas, metricas, tiempoPorVehiculo, aux)
 
 	imprimirMetricasPorFase(aux)
 

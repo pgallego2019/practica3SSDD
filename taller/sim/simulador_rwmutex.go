@@ -238,7 +238,7 @@ func (s *SimuladorRWMutex) RunSim(
 	aux map[Fase]*MetricasFase,
 ) {
 	for sim := 1; sim <= Sims; sim++ {
-		fmt.Printf("\n=== SIMULACIÓN RWMutex %d ===\n", sim)
+		fmt.Printf("\n=== SIMULACIÓN RWMutex %d (%d plazas y %d mecánicos) ===\n", sim, NumPlazas, NumMecanicos)
 
 		// Defensive init (opcional, aunque idealmente quien llame debe inicializar)
 		if metricas == nil {
