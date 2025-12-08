@@ -30,7 +30,7 @@ func MenuMecanicos(t *models.Taller) {
 			fmt.Scanln(&esp)
 			fmt.Print("Años de experiencia: ")
 			fmt.Scanln(&exp)
-			m := t.NewMecanico(nombre, esp, exp)
+			m := t.NewMecanico(nombre, esp)
 			fmt.Printf("Mecánico creado (ID: %d)\n", m.ID)
 		case 2:
 			if len(t.Mecanicos) == 0 {
@@ -57,7 +57,7 @@ func MenuMecanicos(t *models.Taller) {
 			var act int
 			fmt.Scanln(&act)
 			activo = act == 1
-			if err := t.UpdateMecanico(id, nombre, exp, activo); err != nil {
+			if err := t.UpdateMecanico(id, nombre, activo); err != nil {
 				fmt.Println(err)
 			} else {
 				fmt.Println("Mecánico actualizado.")

@@ -78,7 +78,6 @@ func PrintMecanico(m *models.Mecanico) {
 
 	fmt.Printf("ID: %d\n", m.ID)
 	fmt.Printf("Nombre: %s\n", m.Nombre)
-	fmt.Printf("Años de experiencia: %d\n", m.AñosExp)
 	fmt.Printf("Activo: %t\n", m.Activo)
 }
 

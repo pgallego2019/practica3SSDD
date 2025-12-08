@@ -94,7 +94,7 @@ func (t *Taller) NewIncidencia(mat string, tip string, d string) (*Incidencia, e
 	return inc, nil
 }
 
-func (t *Taller) NewMecanico(n string, e string, a int) *Mecanico {
+func (t *Taller) NewMecanico(n string, e string) *Mecanico {
 	esp := Especialidad(strings.ToLower(e))
 
 	if esp != Mecanica && esp != Electrica && esp != Carroceria {
@@ -103,10 +103,9 @@ func (t *Taller) NewMecanico(n string, e string, a int) *Mecanico {
 	}
 
 	m := &Mecanico{
-		ID:      t.NextMecanicoID,
-		Nombre:  n,
-		AñosExp: a,
-		Activo:  true,
+		ID:     t.NextMecanicoID,
+		Nombre: n,
+		Activo: true,
 	}
 	t.NextMecanicoID++
 	t.Mecanicos = append(t.Mecanicos, m)
@@ -191,7 +190,7 @@ func (t *Taller) UpdateVehiculo(mat, marca, modelo, fEntrada, fSalida string) er
 	return nil
 }
 
-func (t *Taller) UpdateMecanico(id int, nombre string, a int, activo bool) error {
+func (t *Taller) UpdateMecanico(id int, nombre string, activo bool) error {
 	m := t.GetMecanico(id)
 	if m == nil {
 		return fmt.Errorf("mecánico con ID %d no encontrado", id)
@@ -199,9 +198,6 @@ func (t *Taller) UpdateMecanico(id int, nombre string, a int, activo bool) error
 
 	if nombre != "" {
 		m.Nombre = nombre
-	}
-	if a != 0 {
-		m.AñosExp = a
 	}
 
 	m.Activo = activo
@@ -336,8 +332,8 @@ func (t *Taller) ShowMecanicosActivos() {
 	hay := false
 	for _, m := range t.Mecanicos {
 		if m.Activo {
-			fmt.Printf("ID: %d | Nombre: %s | Años Exp: %d\n",
-				m.ID, m.Nombre, m.AñosExp)
+			fmt.Printf("ID: %d | Nombre: %s\n",
+				m.ID, m.Nombre)
 			hay = true
 		}
 	}
