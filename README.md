@@ -1,324 +1,332 @@
-# Practica 3 -  El Taller del pueblo
+# Práctica 3 - El Taller del Pueblo
 #### Sistemas Distribuidos - GIT - URJC 2025
 ## Introducción
 
-La práctica tiene como objetivo desarrollar un sistema concurrente en Go que modele el funcionamiento del “Taller del Pueblo”. El taller debe gestionar vehículos que llegan con una incidencia a resolver y que pasan por cuatro fases secuenciales:
+La práctica tiene como objetivo desarrollar un taller procesa vehículos que deben atravesar cuatro fases secuenciales: espera de plaza, reparación, limpieza y revisión final.
 
-- Espera de plaza
-- Reparación
-- Limpieza
-- Revisión final
+Cada vehículo tiene una incidencia de tipo A, B o C, lo que determina su prioridad y los tiempos asociados a cada fase. La simulación incorpora además restricciones reales como número de plazas y mecánicos disponibles.
 
-Cada vehículo tiene una incidencia que pertenece a una de tres categorías (A, B o C) que determinan distintos niveles de prioridad y distintos tiempos de fase. Además, existen limitaciones de recursos como número de plazas o número de mecánicos.
+Para ello, se implementan dos simuladores que usan distintos mecanismos de concurrencia del paquete sync de Go: WaitGroup y RWMutex. El objetivo es comparar ambas implementaciones mediante tests controlados con diferentes distribuciones de vehículos.
 
-El sistema se implementa mediante dos mecanismos de concurrencia distintos del paquete sync de Go: WaitGroup y RWMutex.
-
-El objetivo es comparar ambas implementaciones mediante tests controlados con diferentes distribuciones de vehículos.
 
 ## Reorganización del código del proyecto
-En la práctica anterior el código estaba distribuido en solo tres archivos principales:
 
-- main.go
-- simulacion.go
-- simulacion_test.go
+En la práctica anterior el código estaba distribuido en solo tres archivos principales: _main.go_ ,
+_simulacion.go_ y _simulacion_test.go_
 
 Pero la estructura era difícil de mantener a medida que el proyecto crecía y había que añadir/eliminar funcionalidades. Para mejorar la modularidad y la claridad, reestructuré el proyecto en paquetes. Esta organización permite agrupar código con una responsabilidad concreta y facilitar la reutilización de código.
-
 ```
 taller
-    ├── go.mod
-    ├── main.go
-    ├── menus
-    ├── models
-    ├── sim
-    └── utils
+├── go.mod
+├── main.go
+├── menus
+├── models
+├── utils
+└── sim
 ```
-
 Cada paquete incluye:
 
-- **main.go**: Punto de entrada de la aplicación. Desde aquí se cargan los menús y se coordina la ejecución general del sistema.
+- **main.go** : Punto de entrada de la aplicación. Desde aquí se cargan los menús y se
+coordina la ejecución general del sistema.
+- **menus/** : Contiene la lógica relacionada con la interacción con el usuario. Contiene
+varios submenús para cada una de las estructuras. Permiten delegar acciones a otros
+paquetes.
+- **models/** : Contiene las estructuras de datos principales del proyecto: Cliente, Vehículo,
+Incidencia, Plaza, Mecánico y Taller. Cada archivo contiene un modelo y métodos
+asociados.
+- **utils/** : Contiene funciones auxiliares de uso general como impresión formateada o
+control de pantalla. Permiten simplificar tareas repetitivas.
+- **sim/** : Contiene la lógica relacionada con la simulación del taller y gestiona toda la concurrencia del sistema. Incluye:
+    - Implementación de los dos simuladores solicitados en el enunciado (simulador _RWMutex_ y simulador _WaitGroup_ )
+    - Interfaz _ISimulador_ , ambos simuladores la implementaron para poder ejecutar el sistema con exactamente la misma lógica externa, manteniendo únicamente diferencias internas en sincronización.
+    - El sistema de fases con sus transiciones.
+    - Métricas y resultados de los tests.
+    - Estructuras auxiliares, como colas de prioridad.
+    - Funciones auxiliares, como intercalado de vehículos para simular llegadas aleatorias.
 
-- **menus/**: Contiene la lógica relacionada con la interacción con el usuario. Contiene varios submenús para cada una de las estructuras. Permiten delegar acciones a otros paquetes.
-
-- **models/**: Contiene las estructuras de datos principales del proyecto: Cliente, Vehículo, Incidencia, Plaza, Mecánico y Taller. Cada archivo contiene un modelo y métodos asociados. 
-
-- **sim/**: Contiene la lógica relacionada con la simulación del taller y gestiona toda la concurrencia del sistema. Incluye:
-	- Implementación de los dos simuladores solicitados en el enunciado (simulador RWMutex y simulador WaitGroup)
-	- Interfaz _ISimulador_, ambos simuladores la implementar para poder ejecutar el sistema con exactamente la misma lógica externa, manteniendo únicamente diferencias internas en sincronización.
-	- El sistema de fases con sus transiciones.
-	- Métricas y los resultados de los tests.
-	- Estructuras auxiliares, como colas de prioridad.
-	- Funciones auxiliares, como intercalado de vehículos para simular llegadas aleatorias.
-
-- **utils/**: Contiene funciones auxiliares de uso general como impresión formateada o control de pantalla. Permiten simplificar tareas repetitivas.
 
 ## Explicación del diseño
 
-### Estructuras de datos
-Los modelos que representan elementos del taller han sido simplificados respecto a prácticas anteriores y ahora están todos contenidos en el paquete _models_
+El diseño de la simulación se basa en la separación explícita entre datos (models) y lógica concurrente (sim). Esta organización permite mantener la arquitectura clara, modular y extensible.
 
-- **Vehículo**: Matricula, Marca, Modelo, FechaEntrada, FechaSalida, Incidencia
-- **Incidencia**: ID, Tipo, Descripcion, Estado, TiempoFase
-- **Plaza**: ID, Ocupada, VehiculoMat
-- **Mecánico**: ID, Nombre, Activo
-- **Taller**: Clientes, Vehiculos, Mecanicos, Incidencias, Plazas, NextClienteID, NextIncidenciaID, NextMecanicoID.
+### Modelos
 
-En el paquete _sim_ definimos estructuras nuevas para la simulación concurrente, mirando archivo por archivo tenemos que:
+Los modelos que representan elementos del taller han sido simplificados respecto a
+prácticas anteriores y ahora están todos contenidos en el paquete _models_
+- **Vehículo** : Matrícula, Marca, Modelo, FechaEntrada, FechaSalida, Incidencia
+- **Incidencia** : ID, Tipo, Descripción, Estado, TiempoFase
+- **Plaza** : ID, Ocupada, VehiculoMat
+- **Mecánico** : ID, Nombre, Activo
+- **Taller** : Clientes, Vehiculos, Mecanicos, Incidencias, Plazas, NextClienteID, NextIncidenciaID, NextMecanicoID.
 
-- _**/sim/colas_prioridad.go**_: La estructura _ColaPrioritaria_ implementa una cola de prioridad con tres listas internas (alta, media, baja) basadas en el tipo de incidencia del vehículo. 
+### Diagrama de estados
 
-Las listas internas permiten mantener prioridad explícitamente de manera más sencilla. Además, hay un RWMutex que permite lecturas concurrentes y escrituras exclusivas, de esta forma se puede consultar el tamaño de la cola sin bloqueos.
+Para representar formalmente el ciclo de vida de un vehículo dentro de la simulación, se utiliza el siguiente **diagrama de estados**. Cada vehículo atraviesa un conjunto de estados bien definidos (llegada, entrada, atención, limpieza, revisión y salida), y este diagrama permite visualizar las transiciones entre ellos.
 
-Añadí un canal _notify_ para que los workers pudieran "dormir" mientras esperan una notificación y así evitar el consumo activo de CPU que se da con el polling. Cuando se inserta el primer vehículo, se notifica. También si al extraer un vehículo quedan más, se vuelve a notificar evitando así bloqueos cuando se insertan varios coches seguidos.
+![Diagrama de estados](https://github.com/pgallego2019/practica3SSDD/blob/main/diagramas/Diagramas_P3_SSDD-Copia%20de%20diagrama%20de%20estados.drawio.png)
 
-Esta estructura enlaza fases y evita condiciones de carrera.
+### Estructuras auxiliares
 
-- _**/sim/metricas_sim.go**_: La estructura _Metricas_ almacena información agregada sobre el rendimiento de la simulación. Es para recopilar tiempos totales por vehículo y recuentos por fase. También calculamos el tiempo total de ejecución para comparar entre simuladores.
+El paquete _sim_ define estructuras adicionales necesarias para mantener un flujo
+concurrente seguro.
+- **_ColaPrioritaria_** : Esta estructura implementa una cola de prioridad con tres listas internas (alta, media, baja) basadas en el tipo de incidencia del vehículo. Las listas internas permiten mantener prioridad explícitamente de manera más sencilla. 
+Además, hay un _RWMutex_ que permite lecturas concurrentes (p.ej. consultar tamaño) y escrituras exclusivas (insertar o extraer). Se usa un canal de notificaciones para que los workers pudieran "dormir" mientras esperan una notificación y así evitar el consumo activo de CPU que se da con el polling. Cuando se inserta el primer vehículo, se notifica. También si al extraer un vehículo quedan más, se vuelve a notificar evitando así bloqueos cuando se insertan varios coches seguidos. Esta estructura enlaza fases y evita condiciones de carrera.
 
-Al haber muchos workers, hay muchas escrituras concurrentes. Por eso, protegemos con un RWMutex para que pueda haber lecturas concurrentes y lecturas periódicas para mostrar métricas.
+- **RecursosSim** : Esta estructura modela los recursos compartidos del taller: las colas por fase y los canales que controlan la capacidad de cada fase. Cada fase del taller tiene su cola independiente y eso permite que trabajen en paralelo sin bloquear a los demás. El diseño es thread safe, entonces no necesitamos Mutex.
+- **Métricas**: Se usan dos estructuras:
 
-Hay otra estructura complementaria _MetricasFase_ que registra valores estadísticos básicos de cada fase (mínimo, máximo, promedio y número de vehículos). Aquí cada worker actualiza las métricas, por lo que tenemos riesgo de condición de carrera, entonces también la protegemos con un Mutex. No usamos RWMutex porque aquí se escribe mucho más de lo que se lee.
+    * Metricas: Esta estructura almacena información agregada sobre el rendimiento de la simulación. Es para recopilar tiempos totales por vehículo y recuentos por fase. También calculamos el tiempo total de ejecución para comparar entre simuladores. Al haber muchos workers, hay muchas escrituras concurrentes. Por eso, protegemos con un RWMutex para que pueda haber lecturas concurrentes y lecturas periódicas para mostrar métricas.
 
-- _**/sim/recursos_sim.go**_: La estructura _RecursosSim_ modela los recursos compartidos del taller: las colas por fase y los canales que controlan la capacidad de cada fase. Cada fase del taller tiene su cola independiente y eso permite que trabajen en paralelo sin bloquear a los demás. El diseño es thread safe, entonces no necesitamos Mutex.
+    * MetricasFase: Es una estructura complementaria que registra valores estadísticos básicos de cada fase (mínimo, máximo, promedio y número de vehículos). Aquí cada worker actualiza las métricas, por lo que tenemos riesgo de condición de carrera, entonces también la protegemos con un Mutex. No usamos RWMutex
+porque la frecuencia de escritura es mucho mayor que la de lectura.
 
-### Diagrama de clases
+- **Workers** : Los workers ejecutan unos pasos que crean un pipeline que permite procesar vehículos simultáneamente.
 
-### Diagrama de secuencia
+    1. Espera de notificación o vehículo disponible
+    2. Obtención del token
+    3. Espera del tiempo de fase con variación aleatoria
+    4. Registro de métricas
+    5. Inserción en la cola de la siguiente fase
+    6. Liberación del token
 
-### Diagrama de flujo
+- **Fases** : Cada fase de la simulación funciona mediante una cola de entrada, un número limitado de workers (controlados por el canal), una cola de salida para la fase siguiente.
 
-### Diagrama de concurrencia
+Para comprender de forma global el comportamiento de la simulación, se presenta el siguiente **diagrama de flujo** , que recoge las fases por las que pasa cada vehículo desde su llegada al taller hasta su salida. Este diagrama permite visualizar el pipeline completo (entrada, atención mecánica, limpieza y revisión), así como el orden secuencial y la transición entre fases que más tarde gestionarán los workers y las colas concurrentes.
 
-## Implementación del paquete _sim_
-El paquete sim constituye el núcleo funcional de la simulación del Taller del Pueblo. Su objetivo es reproducir, de forma controlada y concurrente, el flujo de vehículos a través de las distintas fases del taller (Entrada, Atención por mecánico, Limpieza y Revisión final), aplicando restricciones de recursos (plazas disponibles, mecánicos activos) y midiendo el rendimiento global del sistema mediante métricas detalladas.
+![Diagrama de flujo](https://github.com/pgallego2019/practica3SSDD/blob/main/diagramas/Diagramas_P3_SSDD-diagrama%20de%20flujo.drawio.png)
 
-Para ello, el paquete implementa:
+### Diagrama de clases del paquete sim
 
-- Generación estructurada o aleatoria de vehículos, con tiempos base por fase y variación aleatoria controlada.
+A continuación se incluye el diagrama de clases que representa la estructura estática del paquete sim. Este diagrama muestra las entidades principales que intervienen en la simulación (simuladores, colas, recursos y métricas) así como las relaciones entre ellas. Su objetivo es proporcionar una visión global del diseño orientado a objetos que sustenta la arquitectura concurrente de la simulación.
 
-- Colas con prioridad (A > B > C) para simular categorías de incidencias.
+![Diagrama de clases](https://github.com/pgallego2019/practica3SSDD/blob/main/diagramas/Diagramas_P3_SSDD-diagrama%20de%20clases.drawio.png)
 
-- Dos arquitecturas de simulación alternativas para comparar rendimiento:
+### Implementación del paquete sim
 
-	- Simulador con WaitGroup + Colas con notificación (sin polling).
+El paquete sim constituye el núcleo funcional de la simulación del Taller del Pueblo. Su objetivo es reproducir, de forma controlada y concurrente, el flujo de vehículos a través de las distintas fases del taller, aplicando restricciones de recursos (plazas disponibles, mecánicos activos) y midiendo el rendimiento global del sistema mediante métricas detalladas.
 
-	- Simulador con RWMutex + polling (modelo tradicional).
+Para ello, el paquete implementa los siguientes módulos:
 
-- Registro detallado de métricas, por fase y por vehículo.
+#### Módulo vehiculos_sim
 
-Comparación automática de escenarios y generación de tabla final de resultados.
+Este módulo contiene toda la lógica relacionada con la generación, caracterización y temporización de los vehículos que participan en la simulación. Su función es desacoplar la creación y preparación de los vehículos respecto de los simuladores y motores de concurrencia, facilitando su reutilización en múltiples escenarios.
 
-A continuación se describe exhaustivamente cada uno de los módulos del paquete, sus estructuras de datos, objetivos, decisiones de diseño y flujo de ejecución.
+1. Definición de fases
+Las fases representan el pipeline fijo por el que atraviesa cada vehículo dentro del taller. El orden es determinista y está pensado para ser utilizado por los workers de los distintos simuladores: Entrada, Atención, Limpieza, Revisión. Cada fase corresponde a un período de trabajo dentro del taller, y forma parte del cálculo del tiempo total por vehículo.
 
-### Módulo vehiculos_sim
-Este módulo encapsula todos los elementos relacionados con la creación de vehículos, la definición de categorías del taller, la asignación del tiempo de cada fase y la variación temporal aleatoria exigida por el enunciado.
-	#### Definición de fases
-Estas fases definen el pipeline por el que pasan los vehículos. El orden es fijo y determinista.
-	#### Variación del tiempo de fase
+2. Variación del tiempo de fase
 Cada fase tiene un tiempo base (1, 3 o 5 segundos, según categoría) y se calcula una variación en el intervalo [-15%, +15%]. Se varía el tiempo de fase para que exista suficiente diversidad para observar colisiones, colas más largas o diferencias entre simuladores.
-	#### Generación de vehículos
-		- Totalmente aleatoria: Distribuye vehículos entre categorías A/B/C y asigna ID secuenciales. Mezcla internamente y luego intercala categorías para una distribución más realista.
-		-controlada por categorías: dada la distribución de categorías necesarias, se crean los vehículos y se intercalan las categorías.
 
-### Módulo recursos_sim
+3. Generación de vehículos, hay dos tipos:
+- Totalmente aleatoria: Distribuye vehículos entre categorías A/B/C y asigna ID
+secuenciales. Mezcla internamente y luego intercala categorías para una
+distribución más realista. Se usa en la simulación normal desde el menú
+- Controlada por categorías: dada la distribución de categorías necesarias, se crean los vehículos y se intercalan las categorías. Se usa en los escenarios de test.
 
-Introduce una función auxiliar para instanciar workers. Funciona así:
+#### Módulo recursos_sim
 
-1. Espera notificación de elementos.
+Este módulo contiene la infraestructura que permite simular los recursos limitados del taller (plazas, mecánicos, puestos de limpieza y revisión) y los workers que procesan los vehículos en cada etapa. Es uno de los módulos clave del sistema porque implementa: Colas donde esperan los vehículos, canales (semáforos) que limitan la concurrencia, workers que representan a los distintos operarios del taller y transición encadenada entre fases.
 
-2. Toma un token del semáforo (plaza/mecánico).
+* Funcionamiento del worker
+La función LanzarWorker encapsula el comportamiento estándar de un operario en
+cualquiera de las fases. Cada worker ejecuta un bucle infinito que sigue el mismo patrón:
 
-3. Procesa la fase con variación temporal.
+1. **Espera de nuevos elementos:** Queda bloqueado en la cola de entrada hasta que esta emite una notificación.
 
-4. Registra métricas.
+2. **Toma un token del semáforo:** El semáforo representa el recurso limitado (plaza, mecánico, limpiador, revisor). Si no hay tokens disponibles, el worker espera.
 
-5. Encola en la siguiente fase o finaliza (wg.Done()).
+3. **Procesa el vehículo con variación temporal:** Aplica la duración base de la incidencia **con la variación aleatoria**. Esto simula tiempos reales fluctuantes.
 
-### 5. Módulo simulador_waitgroup.go — Simulador eficiente con colas notificadas
+4. **Libera el recurso:** Devuelve el token al semáforo para que otro worker pueda utilizarlo.
 
-Este simulador es la implementación recomendada porque: No usa polling, los workers están dormidos hasta que reciben notify, las colas tienen prioridad real.
+5. **Registra métricas:** El módulo no imprime directamente, sino que delega en la estructura Metricas la gestión del tiempo y del registro por fase.
 
-5.2 Lógica de RunSim
+6. **Encola en la siguiente fase o termina:** Si existe colaOut, se pasa a la fase siguiente y si es la última fase se hace wg.Done() para indicar que el vehículo está acabado.
 
-Inicialización de métricas
-Se inicializan estructuras incluso si vienen nil (defensive init).
+Este diseño unifica el comportamiento de todos los operarios y evita tener lógica duplicada en cada simulador. Las ventajas de este diseño es que se centraliza el comportamiento del worker, reduce código repetido entre simuladores y controla concurrentemente el accesos a los recursos. Además permite añadir nuevas fases fácilmente y hace que el sistema sea escalable porque bastaría con lanzar más workers usando la misma función
 
-Creación de colas prioritarias: colaEntrada → colaMecanico → colaLimpieza → colaRevision
+#### Diagrama de secuencia (worker-colas)
 
-Creación de semáforos: semPlazas (capacidad = plazas disponibles), semMec, semLimp, semRev
+Este diagrama describe la comunicación temporal entre un worker del simulador y las distintas estructuras que intervienen en el procesamiento de un vehículo: colas de fase, semáforos de plazas, métricas y actualización de estados. Su finalidad es ilustrar visualmente el ciclo de trabajo de un worker y la coordinación entre los componentes concurrentes.
 
-Lanzamiento de pools de workers: NumPlazas workers de entrada, NumMecanicos workers de atención, NumPlazas workers de limpieza, NumPlazas workers de revisión. Cada worker ejecuta el patrón de fases con cola prioritaria y notificación.
+![Diagrama de secuencia](https://github.com/pgallego2019/practica3SSDD/blob/main/diagramas/Diagramas_P3_SSDD-diagrama%20de%20secuencia.drawio.png)
 
-Encolado de vehículos: Cada vehículo se encola progresivamente en colaEntrada.
+#### Módulo resultados_sim
 
-Finalización: wgFinal.Wait(), se establece metricas.Fin, se cierra s.Done para que los workers terminen correctamente.
+Este módulo gestiona el almacenamiento y presentación de los resultados de cada
+simulación ejecutada.
 
-Este simulador tiene el menor coste en CPU porque no usa loops con sleep.
+Su objetivo es: Registrar métricas globales al concluir cada simulación, comparar múltiples simuladores o escenarios y presentar una tabla final conjunta.
 
-### 6. Módulo simulador_rwmutex.go — Simulador basado en RWMutex y polling
+Para poder comparar el rendimiento entre simuladores de forma objetiva, la tabla final
+contiene:
+- Nombre del escenario
+- Simulador utilizado: RWMutex o WaitGroup
+- Tiempo total: duración completa de la simulación.
+- Tiempo medio por vehículo: promedio de tiempos finales.
+- Vehículos procesados por fase (para verificar consistencia).
 
-Esta segunda implementación está construida para comparar técnicas de concurrencia.
+La tabla permite detectar: qué simulador es más rápido, cuál es más estable, efectos de cuellos de botella, diferencias en rendimiento según el número de recursos...
 
-6.2 Funcionamiento
+#### Módulo logica_sim
 
-Las colas son slices protegidos con sync.RWMutex. 
-Los workers hacen: pop() protegido por mutex. Si está vacío → time.Sleep(3ms)(polling → mayor carga CPU). Procesan fase. Reencolan.
+Este módulo actúa como puente entre la interfaz del usuario (menú principal) y los distintos simuladores del taller. Aquí es donde se gestionan: la entrada interactiva de parámetros, la creación de vehículos, la elección del simulador y la ejecución completa de la simulación. 
 
-6.3 Cierre ordenado
+El módulo no implementa la lógica del simulador en sí, sino que coordina los elementos ya generados por otros módulos del paquete sim.
 
-Workers usan case s.Done para salir cuando la simulación termina.
+#### Módulo simulador_waitgroup
 
-La implementación se basa en la interfaz:
-### 8. Módulo simulador_test.go — Comparación automática de ambas arquitecturas
+El SimuladorWaitGroup fue diseñado para ser más eficiente y más escalable. Su
+característica clave es la introducción de una ColaPrioritaria por fase y un sistema basado en notificaciones, no en polling.
 
-Ejecuta los escenarios:
+Los workers esperan siempre sobre un select, entonces no consumen CPU cuando la cola está vacía. Extraen el vehículo con prioridad y el uso de ColaPrioritaria lo hace escalable y con mínima contención.
 
-10 / 10 / 10
++ Ventajas: No hay polling, priorización correcta de categorías, arquitectura eficiente y escalable, orden lógico más cercano al funcionamiento de un taller real, no necesita mutex externos para las colas.
++ Desventajas: Ligeramente más complejo conceptualmente, el sistema de notificaciones y múltiples colas requiere mayor cuidado en diseño y estructuras auxiliares.
 
-20 / 5 / 5
+#### Módulo simulador_rwmutex
 
-5 / 5 / 20
+El simuladorRWMutex utiliza las siguientes primitivas del paquete sync: RWMutex para proteger el acceso a las colas, WaitGroup para el final de la fase de Revisión, time.Sleep como mecanismo de polling cuando la cola está vacía.
 
-Para cada uno:
+Cada fase está formada por una cola implementada como *[]Vehiculo, un RWMutex
+asociado y un grupo de workers (limitado por la capacidad de cada fase) que hacen polling activo. Los workers siguen la siguiente secuencia:
 
-Ejecuta SimuladorWaitGroup y SimuladorRWMutex.
+1. Intentan extraer un vehículo de la cola usando pop
+2. Si la cola está vacía, hacen time.Sleep(3ms) y vuelven a intentarlo
+3. Si hay vehículo, consume un token de la fase, ejecuta el “trabajo”, registra las métricas, devuelve el token y pasa el vehículo a la cola siguiente usando push.
 
-Registra tiempos totales, por fase y por vehículo.
+El RWMutex permite lecturas concurrentes sobre las colas y evita las condiciones de
+carrera sin usar canales intermedios.
+- Ventajas: Implementación más sencilla, uso directo de primitivas básicas, fácil de depurar.
+- Desventajas: Polling permanente (consumo innecesario de CPU), más probable que haya contención por el uso intensivo de lock/unlock, las colas basadas en slices requieren operaciones con mayor coste.
 
-Calcula promedios por categoría.
+#### Módulo simulador_interfaz
 
-Inserta la fila en la tabla final.
+Ambos simuladores ejecutan exactamente la misma lógica externa (el mismo número de
+vehículos, las mismas fases, los mismos recursos y las mismas métricas) pero difieren profundamente en cómo gestionan la concurrencia internamente.
 
-Esto permite analizar empíricamente:
+Para permitir esta intercambiabilidad se diseñó la interfaz _ISimulador_ , para poder comparar ambos simuladores en igualdad de condiciones y para que el código de alto nivel del taller no tuviera que conocer los detalles de cada implementación.
 
-Cómo afecta la priorización.
+Ambos simuladores la implementan, permitiendo que:
+- El menú principal ejecute cualquiera de los dos sin cambiar código,
+- Los tests puedan comparar de forma aislada el rendimiento
+- Se reduzca duplicación de lógica
+- Se facilite la extensibilidad (añadir otro simulador sería trivial).
 
-Cómo escalan ambos modelos de concurrencia.
-
-Qué diferencias aparecen en saturación de recursos.
-
-
-"'logica_sim.go' contiene únicamente la lógica de interacción con el usuario y la inicialización de la simulación (parámetros, elección de simulador y generación de vehículos). No introduce nuevas estructuras de datos, por lo que no forma parte del diseño concurrente descrito en esta sección."
-
-"ResultadoSimulacion almacena un resumen ejecutable de cada ejecución: el nombre del escenario, el tipo de simulador empleado, tiempo total, tiempo promedio por vehículo y vehículos procesados por fase."
-
-"El paquete sim proporciona una implementación completa, modular y analíticamente comparable de dos estrategias de simulación.
-
-La estructura del paquete:
-
-Facilita la comprensión del flujo de un taller real.
-
-Cumple los requisitos del enunciado: prioridad, fases, recursos limitados, variación temporal y métricas detalladas.
-
-Permite comparar dos arquitecturas concurrentes en un entorno controlado.
-
-La implementación con WaitGroup + colas notificadas es más eficiente y técnicamente superior; la implementación RWMutex + polling sirve como referencia para analizar el impacto de técnicas de sincronización en sistemas concurrentes."
-### Simulador RWMutex
-Usa:
-
-sync.RWMutex para proteger estructuras compartidas
-
-RLock para lectura concurrente
-
-Lock para mutaciones
-
-Menor riesgo de bloqueo total
-
-Mejor paralelismo
-
-Es más complejo pero más eficiente.
-
-### Simulador WaitGroup
-Usa:
-
-Un WaitGroup para esperar a que todas las goroutines terminen
-
-Control más sencillo
-
-Menos paralelismo real
-
-Mayor bloqueo de fases
-
-Es menos eficiente en competencia alta.
+Así, la capa superior no sabe si está ejecutando el simulador con RWMutex o el basado en WaitGroup: solo conoce que ejecutará RunSim() sobre una instancia que cumple la interfaz.
 
 ## Test realizados
-Los tests se definen en simulacion_test.go y ejecutan los tres escenarios obligatorios del enunciado:
 
-| Escenario  | Vehículos |
-| ------------- |:-------------:|
-| 1      | 10A, 10B, 10C     |
-| 2      | 20A, 5B, 5C     |
-| 3      | 5A, 5B, 20C     |
+El objetivo principal es comparar dos implementaciones de sincronización:
 
+1. Simulador WaitGroup + colas prioritarias
+2. Simulador basado en RWMutex
 
-Cada escenario se simula una vez con el simulador WaitGroup y una vez con el simulador RWMutex
+Los tests permiten:
+- Validar que ambos simuladores completan correctamente el flujo de trabajo: Entrada → Atención → Limpieza → Revisión.
+- Analizar los tiempos de ejecución por fase.
+- Comparar el tiempo total y tiempo medio por vehículo.
+- Estudiar el impacto de distintas distribuciones de categorías de vehículos.
+- Detectar posibles cuellos de botella o diferencias de eficiencia entre estrategias de sincronización.
 
-Los tests realizan:
+Cada ejecución del test:
+- Hay 10 plazas y 2 mecánicos
+- Genera 30 vehículos distribuidos en distintas categorías (A-mecánica, B-eléctrica, C-carrocería).
+- Ejecuta la simulación con cada uno de los dos motores de concurrencia.
+- Registra:
+    + Tiempo total de la simulación.
+    + Tiempo medio por vehículo.
+    + Métricas por fase: mínimo, máximo y promedio.
+    + Métricas por categoría.
 
-Impresión de métricas por fase
-
-Tiempo total
-
-Tiempo medio por vehículo
-
-Tiempo medio por categoría
-
-Comparativa entre simuladores
-
-También se agrega un modo verbose opcional que permite ver: formato del mensaje
+Además, el test agrega los resultados en una tabla comparativa final, lo que permite estudiar la tendencia global.
 
 ### Métricas obtenidas y análisis
-A partir de tus simulaciones, las conclusiones generales esperables son:
 
-RWMutex
+**1. Tiempo total de simulación**
 
-Mayor paralelismo real
+Ambos simuladores obtienen tiempos similares, pero el WaitGroup tiende a ser ligeramente más estable entre escenarios, mientras que el RWMutex presenta más variabilidad, especialmente cuando se invierte la carga hacia categorías mayoritarias.
 
-Fewer artificial stalls
+**2. Tiempo promedio por vehículo**
 
-Métricas más coherentes entre fases
+Cuando un tipo de vehículo es mayoritario (p. ej. 20A/5B/5C), la categoría mayoritaria se procesa mucho más rápido (≈ 6 s). Las minoritarias se estancan y muestran tiempos medios de ≈ 12 s. Esto confirma el funcionamiento correcto de la política de colas: Prioridad por orden de llegada, pero afectada por cuellos de botella en mecánicos y plazas.
 
-Consume más CPU pero menor tiempo total de simulación
+**3. Métricas**
 
-WaitGroup
+Las cuatro fases muestran duraciones muy homogéneas:
+- Entrada: 0.85 – 1.14 s
+- Atención: 0.86 – 1.15 s
+- Limpieza: 0.85 – 1.15 s
+- Revisión: 0.85 – 1.15 s
+Esto valida que los tiempos simulados (aleatorios) se están registrando bien y que la sincronización no introduce retrasos inesperados en fases concretas.
 
-Simulación correcta pero más lenta
+### Comparación entre WaitGroup y RWMutex
 
-Más “esperas secuenciales” provocadas por dependencias no optimizadas
+**1. WaitGroup**
 
-Menos competición por mutexes
+Ventajas: Distribución de tiempos más regular, mejor rendimiento en escenarios
+balanceados, simplicidad de sincronización al esperar fases completas.
 
-Simulación más determinista pero menos eficiente
+Desventajas: Puede ser menos eficiente en situaciones de alta contención si existen tareas muy desiguales.
 
-En especial, RWMutex gestiona mucho mejor:
+**2. RWMutex**
 
-Las colas de prioridad
+Ventajas: Ligera ventaja cuando la carga está concentrada en pocas categorías
+(20A/5B/5C), más flexible para permitir lectura concurrente.
 
-La liberación parcial de recursos
+Desventajas: Mayor variabilidad entre iteraciones, penalización en escenarios donde
+muchas goroutines compiten por el lock.
+En general, WaitGroup muestra mayor estabilidad, RWMutex mayor variabilidad.
 
-La simultaneidad entre vehículos
-## Conclusiones
-La práctica permitió profundizar en:
+### Escenarios
 
-Diseño de sistemas concurrentes en Go
+Se evaluaron tres escenarios, cada uno con 30 vehículos, pero distribuido de forma
+diferente para estudiar cómo afecta la carga del sistema:
 
-Diferencias entre sincronización por WaitGroup y RWMutex
+#### Escenario 1: 10A / 10B / 10C
 
-Modelado de sistemas reales mediante concurrencia
+Carga equilibrada.
+Resultados:
+- Los tiempos promedio por categoría son prácticamente idénticos.
+- Tiempo total ≈ 18 s para ambos simuladores.
+- Mínimas diferencias entre WaitGroup (11.98 s) y RWMutex (12.06 s).
+Es el escenario perfecto para medir eficiencia base: ambos simuladores muestran
+rendimiento similar.
 
-Técnicas de medición y análisis de rendimiento
+#### Escenario 2: 20A / 5B / 5C
 
-Organización de proyectos Go en paquetes
+Carga concentrada en A (mecánica).
+Resultados:
+- Los vehículos A tardan solo ≈ 5.9 s.
+- B y C tardan ≈ 11.7–11.9 s.
+- El tiempo total del simulador RWMutex es el menor registrado (17.65 s).
+Es el único escenario donde RWMutex es más rápido que WaitGroup.
 
-Implementación de colas de prioridad y fases secuenciales
+#### Escenario 3: 5A / 5B / 20C
 
-Integración de tests automatizados
+El escenario inverso al anterior.
+Resultados:
+- Los vehículos de la categoría mayoritaria (C) se procesan rápido: ≈ 5.9 s.
+- Los minoritarios vuelven a duplicar su tiempo.
+Aquí WaitGroup supera a RWMutex (17.89 s vs 18.38 s).
 
-Conclusión técnica
+### Conclusiones
 
-RWMutex ofrece un rendimiento superior gracias a su alto grado de paralelismo y bajo nivel de bloqueo, siendo el mejor simulador para cargas grandes o alta competencia de recursos.
-WaitGroup, aunque más simple, no se adapta igual de bien al control fino de recursos y genera más congestión.
+Ambas estrategias de sincronización funcionan correctamente y completan el flujo sin errores ni deadlocks.
 
-Conclusión personal
+El simulador WaitGroup es más estable y ligeramente más eficiente en escenarios
+equilibrados o dominados por una categoría distinta a la inicial del taller.
 
-La práctica permitió simular un sistema realista con concurrencia avanzada y comprender más profundamente cómo Go permite resolver problemas complejos mediante goroutines, sincronización y estructuras compartidas.
+El simulador RWMutex muestra mejor rendimiento cuando la mayor parte del tráfico se
+concentra en una categoría específica, aunque su tiempo total presenta mayor variabilidad.
+
+Los tiempos por fase son prácticamente idénticos entre ambos simuladores, lo que
+demuestra que la diferencia de rendimiento proviene estrictamente de la estrategia de sincronización, no del procesamiento de las fases.
+
+El test permite validar que el sistema de métricas funciona correctamente, ya que recoge mínimos, máximos, promedios y tiempos por categoría sin inconsistencias. El comportamiento del taller se ajusta a lo esperado en términos de concurrencia:
+- La categoría mayoritaria monopoliza recursos y reduce sus tiempos.
+- Las minoritarias sufren mayor espera acumulada.
+El rendimiento total del sistema ronda los 18 segundos en cualquier escenario, lo que confirma que la carga total (30 vehículos × 4 fases × tiempos aleatorios ≈ 1 s) está siendo procesada de forma concurrente y eficiente.
+
+
+
