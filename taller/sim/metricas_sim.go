@@ -11,7 +11,7 @@ import (
 type Metricas struct {
 	VehiculosPorFase   map[Fase]int
 	TiemposPorVehiculo map[int]time.Duration
-	mutex              sync.RWMutex //CAMBIO POR RW
+	mutex              sync.RWMutex
 	Inicio             time.Time
 	Fin                time.Time
 	Simulador          string
@@ -96,14 +96,6 @@ func LanzarWorkerMetricas(
 			if v == nil {
 				continue
 			}
-
-			// Imprimir solo al inicio de la fase (intentando no imprimir demasiadas lineas)
-			fmt.Printf("Tiempo %v | Coche %s | Incidencia %s | Inicio %s\n",
-				time.Since(metricas.Inicio).Truncate(time.Millisecond),
-				v.Matricula,
-				v.Incidencia.Tipo,
-				fase,
-			)
 
 			<-sem
 			start := time.Now()

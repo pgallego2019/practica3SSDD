@@ -21,8 +21,8 @@ type SimuladorRWMutex struct {
 	mtxLimp    sync.RWMutex
 	mtxRev     sync.RWMutex
 
-	Verbose bool          //para no imprimir en test y solo en simulacion
-	Done    chan struct{} // para parar workers
+	Verbose bool // Para no imprimir en test y solo en simulacion
+	Done    chan struct{}
 }
 
 func (s *SimuladorRWMutex) SetVerbose(v bool) {
@@ -63,7 +63,6 @@ func (s *SimuladorRWMutex) imprimirVehiculo(v *models.Vehiculo, fase Fase, estad
 		elapsed, v.Matricula, v.Incidencia.Tipo, fase.String(), estado)
 }
 
-// workerEntrada: espera tokens en semPlazas, procesa y pasa a colaMec
 func (s *SimuladorRWMutex) workerEntrada(
 	semPlazas chan struct{},
 	metricas *Metricas,
@@ -83,7 +82,6 @@ func (s *SimuladorRWMutex) workerEntrada(
 			continue
 		}
 
-		// ocupa plaza
 		<-semPlazas
 
 		s.imprimirVehiculo(v, FaseEntrada, "Entra plaza")
@@ -98,14 +96,12 @@ func (s *SimuladorRWMutex) workerEntrada(
 
 		s.imprimirVehiculo(v, FaseEntrada, "Sale plaza")
 
-		// libera plaza
 		semPlazas <- struct{}{}
 
 		push(&s.mtxMec, &s.colaMec, v)
 	}
 }
 
-// workerMecanico: usa semMec
 func (s *SimuladorRWMutex) workerMecanico(
 	semMec chan struct{},
 	metricas *Metricas,
@@ -125,7 +121,7 @@ func (s *SimuladorRWMutex) workerMecanico(
 			continue
 		}
 
-		<-semMec // ocupa mecánico
+		<-semMec
 
 		s.imprimirVehiculo(v, FaseAtencion, "Atendido por mecánico")
 
@@ -139,13 +135,12 @@ func (s *SimuladorRWMutex) workerMecanico(
 
 		s.imprimirVehiculo(v, FaseAtencion, "Finaliza mecánico")
 
-		semMec <- struct{}{} // libera mecánico
+		semMec <- struct{}{}
 
 		push(&s.mtxLimp, &s.colaLimp, v)
 	}
 }
 
-// workerLimpieza: usa semLimp
 func (s *SimuladorRWMutex) workerLimpieza(
 	semLimp chan struct{},
 	metricas *Metricas,
@@ -165,7 +160,7 @@ func (s *SimuladorRWMutex) workerLimpieza(
 			continue
 		}
 
-		<-semLimp // ocupa plaza de limpieza
+		<-semLimp
 
 		s.imprimirVehiculo(v, FaseLimpieza, "Limpiando")
 
@@ -179,13 +174,12 @@ func (s *SimuladorRWMutex) workerLimpieza(
 
 		s.imprimirVehiculo(v, FaseLimpieza, "Limpieza finalizada")
 
-		semLimp <- struct{}{} // libera plaza limpieza
+		semLimp <- struct{}{}
 
 		push(&s.mtxRev, &s.colaRev, v)
 	}
 }
 
-// workerRevision: usa semRev y es el que marca finalización (wgFinal.Done)
 func (s *SimuladorRWMutex) workerRevision(
 	semRev chan struct{},
 	wgFinal *sync.WaitGroup,
@@ -206,7 +200,7 @@ func (s *SimuladorRWMutex) workerRevision(
 			continue
 		}
 
-		<-semRev // ocupa plaza de revisión
+		<-semRev
 
 		s.imprimirVehiculo(v, FaseRevision, "Revisión")
 
@@ -220,7 +214,7 @@ func (s *SimuladorRWMutex) workerRevision(
 
 		s.imprimirVehiculo(v, FaseRevision, "Vehículo entregado")
 
-		semRev <- struct{}{} // libera plaza revisión
+		semRev <- struct{}{}
 
 		wgFinal.Done() // vehículo completamente terminado
 	}
@@ -262,18 +256,15 @@ func (s *SimuladorRWMutex) RunSim(
 
 		ImprimirResumenCategorias(vehiculos)
 
-		// Poblar cola de entrada (protegida)
 		s.mtxEntrada.Lock()
 		s.colaEntrada = append(s.colaEntrada, vehiculos...)
 		s.mtxEntrada.Unlock()
 
-		// semáforos compartidos (canales con tokens)
 		semPlazas := make(chan struct{}, NumPlazas)
 		semLimp := make(chan struct{}, NumPlazas)
 		semRev := make(chan struct{}, NumPlazas)
 		semMec := make(chan struct{}, NumMecanicos)
 
-		// inicializar tokens
 		for i := 0; i < NumPlazas; i++ {
 			semPlazas <- struct{}{}
 			semLimp <- struct{}{}
@@ -283,24 +274,18 @@ func (s *SimuladorRWMutex) RunSim(
 			semMec <- struct{}{}
 		}
 
-		// wgFinal: contaremos el total de vehículos que terminan la última fase
 		var wgFinal sync.WaitGroup
 		wgFinal.Add(len(vehiculos))
 
-		// Lanzar pools de workers: Entrada y Limpieza usan NumPlazas, Mecanicos usan NumMecanicos, Revision usa NumPlazas (o NumPlazas)
-		// Entrada
 		for i := 0; i < NumPlazas; i++ {
 			go s.workerEntrada(semPlazas, metricas, tiempoPorVehiculo, aux)
 		}
-		// Mecanicos
 		for i := 0; i < NumMecanicos; i++ {
 			go s.workerMecanico(semMec, metricas, tiempoPorVehiculo, aux)
 		}
-		// Limpieza
 		for i := 0; i < NumPlazas; i++ {
 			go s.workerLimpieza(semLimp, metricas, tiempoPorVehiculo, aux)
 		}
-		// Revision
 		for i := 0; i < NumPlazas; i++ {
 			go s.workerRevision(semRev, &wgFinal, metricas, tiempoPorVehiculo, aux)
 		}

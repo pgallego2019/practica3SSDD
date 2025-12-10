@@ -7,31 +7,23 @@ import (
 	"time"
 )
 
-// NO tener WaitGroups dentro de structs que tienen un ciclo de vida mayor que la ejecución puntual del trabajo
 type SimuladorWaitGroup struct {
 	Taller  *models.Taller
 	Start   time.Time
-	Done    chan struct{} // Para saber cuando cerrar
-	Verbose bool          //para no imprimir en test y solo en simulacion
+	Done    chan struct{}
+	Verbose bool
 }
 
 func (s *SimuladorWaitGroup) SetVerbose(v bool) {
 	s.Verbose = v
 }
 
-// Constructor del simulador
 func NewSimuladorWaitGroup(t *models.Taller) *SimuladorWaitGroup {
 	return &SimuladorWaitGroup{
 		Taller: t,
 		Start:  time.Now(),
 	}
 }
-
-// Uso un worker por fase para que runsim solo tenga que manejar el flujo
-
-// TODO hacer la impresion cuando se cambia de fase desde la cola prioritaria?
-// cuando se entra/sale se llama a imprimirVehiculo desde el worker
-// Así no haría sleep en los workers cuando la cola está vacía, sino que esperaría a que haya vehículos
 
 func (s *SimuladorWaitGroup) workerEntrada(
 	colaIn *ColaPrioritaria,
@@ -44,7 +36,7 @@ func (s *SimuladorWaitGroup) workerEntrada(
 	for {
 		select {
 		case <-s.Done:
-			return // fin del worker
+			return
 		case <-colaIn.notify:
 			// hay vehículo, seguimos
 		}
@@ -54,7 +46,7 @@ func (s *SimuladorWaitGroup) workerEntrada(
 			continue
 		}
 
-		<-semPlazas // ocupa plaza
+		<-semPlazas
 
 		s.imprimirVehiculo(v, FaseEntrada, "Entra plaza")
 		start := time.Now()
@@ -64,9 +56,9 @@ func (s *SimuladorWaitGroup) workerEntrada(
 		s.imprimirVehiculo(v, FaseEntrada, "Sale plaza")
 		aux[FaseEntrada].Registrar(time.Since(start))
 
-		semPlazas <- struct{}{} // libera plaza
+		semPlazas <- struct{}{}
 
-		colaOut.Push(v) // pasa a mecánico
+		colaOut.Push(v)
 	}
 }
 
@@ -90,7 +82,7 @@ func (s *SimuladorWaitGroup) workerMecanico(
 			continue
 		}
 
-		<-semMec // ocupa mecánico
+		<-semMec
 		s.imprimirVehiculo(v, FaseAtencion, "Atendido por mecánico")
 		start := time.Now()
 		time.Sleep(variacionTiempoFase(v.Incidencia.TiempoFase))
@@ -99,9 +91,9 @@ func (s *SimuladorWaitGroup) workerMecanico(
 		s.imprimirVehiculo(v, FaseAtencion, "Finaliza mecánico")
 		aux[FaseAtencion].Registrar(time.Since(start))
 
-		semMec <- struct{}{} // libera mecánico
+		semMec <- struct{}{}
 
-		colaOut.Push(v) // pasa a limpieza
+		colaOut.Push(v)
 	}
 }
 
@@ -184,8 +176,6 @@ func (s *SimuladorWaitGroup) imprimirVehiculo(v *models.Vehiculo, fase Fase, est
 		elapsed, v.Matricula, v.Incidencia.Tipo, fase.String(), estado)
 }
 
-// Ahora que tengo colas de prioridad tengo que asegurar que los vehiculos se atienden por orden de prioridad
-// Los mecanicos deben atender primero los de mecanica, luego los electricos y por ultimo los de carroceria
 func (s *SimuladorWaitGroup) RunSim(
 	vehiculos []*models.Vehiculo,
 	Sims int,

@@ -379,20 +379,17 @@ func (t *Taller) LiberarPlaza(v *Vehiculo) {
 }
 
 func (t *Taller) AdmitirCliente(clienteID int, v *Vehiculo, mecanicoID int) error {
-	// Verificar si el cliente existe
 	cliente := t.GetCliente(clienteID)
 	if cliente == nil {
 		return fmt.Errorf("cliente con ID %d no encontrado", clienteID)
 	}
 
-	// Verificar si el vehículo ya está asignado a alguna plaza
 	for _, p := range t.Plazas {
 		if p.VehiculoMat == v.Matricula {
 			return fmt.Errorf("el vehículo %s ya está asignado a la plaza %d", v.Matricula, p.ID)
 		}
 	}
 
-	// Buscar una plaza libre
 	plazaLibre := -1
 	for i, p := range t.Plazas {
 		if !p.Ocupada {
@@ -404,23 +401,19 @@ func (t *Taller) AdmitirCliente(clienteID int, v *Vehiculo, mecanicoID int) erro
 		return fmt.Errorf("no hay plazas disponibles para el vehículo %s", v.Matricula)
 	}
 
-	// Asegurar que el vehículo esté en el registro del taller
 	existente := t.GetVehiculo(v.Matricula)
 	if existente == nil {
 		t.Vehiculos = append(t.Vehiculos, v)
 	}
 
-	// Verificar si el cliente ya tiene el vehículo asignado
 	for _, veh := range cliente.Vehiculos {
 		if veh.Matricula == v.Matricula {
 			return fmt.Errorf("el vehículo %s ya está asignado al cliente %s", v.Matricula, cliente.Nombre)
 		}
 	}
 
-	// Asignar el vehículo al cliente
 	cliente.Vehiculos = append(cliente.Vehiculos, v)
 
-	// Asignar el vehículo a la plaza libre
 	t.Plazas[plazaLibre].Ocupada = true
 	t.Plazas[plazaLibre].VehiculoMat = v.Matricula
 

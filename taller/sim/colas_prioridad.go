@@ -5,38 +5,17 @@ import (
 	"taller/models"
 )
 
-// Para mantener un orden de prioridad en cada fase uso una cola con 3 listas internas
-// Pero necesita un rwmutex para ser seguro en concurrencia
-
-//TODO añadir un canal de mensajes cuando se cambia de fase?
-/*Push() envía notify
-worker hace <-notify
-worker hace PopFront()
-worker SI llama a imprimirVehiculo (no runsim)*/
-
 type ColaPrioritaria struct {
 	altas  []*models.Vehiculo
 	medias []*models.Vehiculo
 	bajas  []*models.Vehiculo
 	mtx    sync.RWMutex
-	notify chan struct{} // canal para notificar a workers que hay un vehículo
+	notify chan struct{}
 }
 
 func NewColaPrioritaria() *ColaPrioritaria {
 	return &ColaPrioritaria{
 		notify: make(chan struct{}, 1),
-		/*Cada worker solo despierta cuando recibe un notify. (buffer 1)
-		si push mete 5 vehículos cuando la cola está vacía, SOLO envía 1 notify.
-		Los otros 4 vehículos nunca despieren a los workers -> atascos
-
-		Por eso, cuando un worker hace PopFront, si aún hay vehículos en la cola,
-		vuelve a enviar otro notify y despierta a otro worker.
-		Push solo despierta cuando llega el primer vehículo a una cola vacía.
-
-		NO tengo espera activa (sleep) en los workers, solo esperan en el canal
-		NO hay condición de carrera porque el canal es seguro en concurrencia (mtx)
-		Se imprimen mensajes desde los workers cuando entran/salen de fase
-		*/
 	}
 }
 
